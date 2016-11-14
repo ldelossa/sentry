@@ -1,83 +1,175 @@
 import React from 'react';
-import ProjectActions from '../../actions/projectActions';
+import {Link} from 'react-router';
 
-const WaitingForApp = React.createClass({
+import ApiMixin from '../../mixins/apiMixin';
+import LanguageNav from './languageNav';
+import LoadingError from '../../components/loadingError';
+import LoadingIndicator from '../../components/loadingIndicator';
+import NotFound from '../../components/errors/notFound';
+import {t, tct} from '../../locale';
+
+const ProjectInstallPlatform = React.createClass({
   propTypes: {
-    project: React.PropTypes.object,
-    organization: React.PropTypes.object
+    platformData: React.PropTypes.object.isRequired
+  },
+
+  mixins: [
+    ApiMixin
+  ],
+
+  getInitialState(props) {
+    props = props || this.props;
+    let params = props.params;
+    let key = params.platform;
+    let integration;
+    let platform;
+    props.platformData.platforms.forEach((p_item) => {
+      if (integration) {
+        return;
+      }
+      integration = p_item.integrations.filter((i_item) => {
+        return i_item.id == key;
+      })[0];
+      if (integration) {
+        platform = p_item;
+      }
+    });
+
+    return {
+      loading: true,
+      error: false,
+      integration: integration,
+      platform: platform,
+      html: null
+    };
   },
 
   componentDidMount() {
-    setTimeout(() => {
-      console.log('settimeout finished!');
-      ProjectActions.updateSuccess({
-        id: this.props.project.id,
-        firstEvent: true
-      });
-    }, 2000);
+    this.fetchData();
+    $(window).scrollTop(0);
   },
 
-  render() {
-    let project = this.props.project;
-    let projectId = project.slug;
-    let orgId = this.props.organization.id;
-    if (!project.firstEvent) {
-      console.log(project.firstEvent);
-      return (
-        <span className="btn btn-default" style={{background: 'yellow'}}>Waiting to hear from your app...</span>
-      );
-    } else {
-      return (
-        <a href={`/${orgId}/${projectId}/`} className="btn btn-default">Go to issues</a>
-      );
+  componentWillReceiveProps(nextProps) {
+    if (nextProps.params.platform !== this.props.params.platform) {
+      this.setState(this.getInitialState(nextProps), this.fetchData);
+      $(window).scrollTop(0);
     }
-  }
-});
-
-const Platform = React.createClass({
-  contextTypes: {
-    project: React.PropTypes.object,
-    organization: React.PropTypes.object
   },
 
-  render() {
-    let {project, organization} = this.context;
+  fetchData() {
+    let {orgId, projectId, platform} = this.props.params;
+    this.api.request(`/projects/${orgId}/${projectId}/docs/${platform}/`, {
+      success: (data) => {
+        this.setState({
+          loading: false,
+          error: false,
+          html: data.html
+        });
+      },
+      error: () => {
+        this.setState({
+          loading: false,
+          error: true
+        });
+      }
+    });
+  },
+
+  getPlatformLink(platform, display) {
+    let {orgId, projectId} = this.props.params;
+    return (
+      <Link
+        key={platform}
+        to={`/${orgId}/${projectId}/settings/install/${platform}/`}
+        className="list-group-item">
+          {display || platform}
+      </Link>
+    );
+  },
+
+  renderSidebar() {
+    let platform = this.state.platform;
+    return (
+      <div className="install-sidebar col-md-2">
+        {this.props.platformData.platforms.map((p_item) => {
+          return (
+            <LanguageNav key={p_item.id} name={p_item.name} active={platform && platform.id === p_item.id}>
+              {p_item.integrations.map((i_item) => {
+                return this.getPlatformLink(i_item.id, (i_item.id === p_item.id ? t('Generic') : i_item.name));
+              })}
+            </LanguageNav>
+          );
+        })}
+      </div>
+    );
+  },
+
+  renderBody() {
+    let {integration, platform} = this.state;
+    let queryParams = this.props.location.query;
+    let {orgId, projectId} = this.props.params;
+
+    if (!integration || !platform) {
+      return <NotFound />;
+    }
 
     return (
-      <div>
-        <h2>Install</h2>
-        <WaitingForApp project={project} organization={organization}/>
-        <ol>
-          <li>
-            <h4>Get the Laravel SDK</h4>
-            <pre>$ composer require sentry/sentry-laravel</pre>
-          </li>
-          <li>
-            <h4>Add the Sentry service provider...</h4>
-            <pre>'providers' => array(
-    // ...
-    Sentry\SentryLaravel\SentryLaravelServiceProvider::class,
-)
+      <div className="box">
+        <div className="box-header">
+          <div className="pull-right">
+            <a href={integration.link} className="btn btn-sm btn-default">{t('Full Documentation')}</a>
+          </div>
 
-'aliases' => array(
-    // ...
-    'Sentry' => Sentry\SentryLaravel\SentryFacade::class,
-)</pre>
-          </li>
-          <li>
-            <h4>Add Sentry reporting...</h4>
-            <pre>public function report(Exception $e)
-{'{'}
-    if ($this->shouldReport($e)) {'{'}
-        app('sentry')->captureException($e);
-    {'}'}
-    parent::report($e);
-{'}'}</pre>
-          </li>
-        </ol>
+          <h3>{t('Configure %(integration)s', {integration: integration.name})}</h3>
+        </div>
+        <div className="box-content with-padding">
+          <p>
+            {tct(`
+             This is a quick getting started guide. For in-depth instructions
+             on integrating Sentry with [integration], view
+             [docLink:our complete documentation].
+            `, {
+              integration: integration.name,
+              docLink: <a href={integration.link} />
+            })}
+          </p>
+
+          {this.state.loading ?
+            <LoadingIndicator />
+          : (this.state.error ?
+            <LoadingError onRetry={this.fetchData} />
+          :
+            <div dangerouslySetInnerHTML={{__html: this.state.html}}/>
+          )}
+
+          {queryParams.hasOwnProperty('signup') ?
+            // Using <a /> instead of <Link /> as hashchange events are not
+            // triggered when switching views within React Router
+            <p>
+              <a
+                href={`/${orgId}/${projectId}/#welcome`}
+                className="btn btn-primary btn-lg">
+                  {t('Got it! Take me to the Issue Stream.')}
+              </a>
+            </p>
+          :
+            null
+          }
+        </div>
       </div>
-   );
+    );
+  },
+
+  render() {
+    return (
+      <div className="install row">
+        <div className="install-content col-md-10">
+          {this.renderBody()}
+        </div>
+        {this.renderSidebar()}
+      </div>
+    );
   }
 });
 
-export default Platform;
+export default ProjectInstallPlatform;
