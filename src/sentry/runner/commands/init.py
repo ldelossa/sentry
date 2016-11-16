@@ -13,10 +13,10 @@ import click
 
 @click.command()
 @click.option('--dev', default=False, is_flag=True, help='Use settings more conducive to local development.')
-@click.option('redis_host', default="127.0.0.1", help='Specify the redis host')
+@click.argument('redis_host', default="127.0.0.1", help='Specify the redis host')
 @click.argument('directory', required=False)
 @click.pass_context
-def init(ctx, dev, directory):
+def init(ctx, dev, directory, redis_host):
     "Initialize new configuration directory."
     from sentry.runner.settings import discover_configs, generate_settings
     if directory is not None:
@@ -36,7 +36,7 @@ def init(ctx, dev, directory):
     if directory and not os.path.exists(directory):
         os.makedirs(directory)
 
-    py_contents, yaml_contents = generate_settings(dev)
+    py_contents, yaml_contents = generate_settings(dev, redis=redis_host)
 
     if os.path.isfile(yaml):
         click.confirm("File already exists at '%s', overwrite?" % click.format_filename(yaml), abort=True)
