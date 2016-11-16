@@ -42,7 +42,7 @@ redis.clusters:
   default:
     hosts:
       0:
-        host: 127.0.0.1
+        host: '%(redis_host)s'
         port: 6379
 
 ################

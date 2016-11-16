@@ -27,7 +27,7 @@ def load_config_template(path, version='default'):
     return resource_string('sentry', 'data/config/%s.%s' % (path, version)).decode('utf8')
 
 
-def generate_settings(dev=False):
+def generate_settings(dev=False, redis="127.0.0.1"):
     """
     This command is run when ``default_path`` doesn't exist, or ``init`` is
     run and returns a string representing the default data to put into their
@@ -37,6 +37,7 @@ def generate_settings(dev=False):
         'secret_key': generate_secret_key(),
         'debug_flag': dev,
         'mail.backend': 'console' if dev else 'smtp',
+        'redis_host': redis
     }
 
     py = load_config_template(DEFAULT_SETTINGS_OVERRIDE, 'default') % context
